@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WAKH AI - Search Assistant</title>
+    <style>
+        :root {
+            --bg-color: #131314;
+            --chat-bg: #1e1f20;
+            --border-color: #444746;
+            --text-color: #e3e3e3;
+            --gold-color: #d4af37;
+            --gold-hover: #f3e5ab;
+            --user-bubble: #2b2c2f;
+            --bot-bubble: #1e1f20;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0; padding: 0;
+            display: flex; height: 100vh; overflow: hidden;
+        }
+        .sidebar {
+            width: 260px; background-color: #171717;
+            border-right: 1px solid var(--border-color);
+            display: flex; flex-direction: column; padding: 20px;
+        }
+        .sidebar h3 { color: var(--gold-color); font-size: 18px; margin-top: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+        .history-list { flex: 1; overflow-y: auto; list-style: none; padding: 0; margin: 0; }
+        .history-item {
+            padding: 10px 12px; margin-bottom: 8px; background: #212121;
+            border-radius: 6px; font-size: 14px; cursor: pointer;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            border: 1px solid transparent; transition: 0.2s;
+        }
+        .history-item:hover { border-color: var(--gold-color); color: var(--gold-hover); }
+        .main-container { flex: 1; display: flex; flex-direction: column; height: 100vh; position: relative; }
+        .chat-header {
+            padding: 15px 25px; background-color: var(--chat-bg);
+            border-bottom: 1px solid var(--border-color);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .brand-title h1 { margin: 0; font-size: 22px; color: var(--gold-color); font-weight: 700; }
+        .brand-title span { font-size: 12px; color: #aaa; letter-spacing: 1px; text-transform: uppercase; }
+        .history-btn {
+            background: transparent; border: 1px solid var(--gold-color); color: var(--gold-color);
+            padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; transition: 0.2s;
+        }
+        .history-btn:hover { background: var(--gold-color); color: #000; }
+        .chat-messages { flex: 1; overflow-y: auto; padding: 25px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
+        .message { max-width: 80%; padding: 15px 20px; border-radius: 12px; line-height: 1.6; font-size: 15px; word-wrap: break-word; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .message.user { background-color: var(--user-bubble); align-self: flex-end; border: 1px solid #333; }
+        .message.bot { background-color: var(--bot-bubble); align-self: flex-start; border-left: 4px solid var(--gold-color); border: 1px solid var(--border-color); }
+        .chat-input-area { padding: 20px 25px; background-color: var(--bg-color); display: flex; justify-content: center; }
+        .input-wrapper {
+            width: 100%; max-width: 800px; background-color: var(--chat-bg);
+            border: 1px solid var(--border-color); border-radius: 12px;
+            display: flex; align-items: center; padding: 8px 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .input-wrapper:focus-within { border-color: var(--gold-color); }
+        .input-wrapper textarea {
+            flex: 1; background: transparent; border: none; color: var(--text-color);
+            font-size: 15px; resize: none; height: 24px; max-height: 120px; outline: none; font-family: inherit;
+        }
+        .send-btn {
+            background-color: var(--gold-color); border: none; color: #000;
+            width: 38px; height: 38px; border-radius: 8px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; font-weight: bold;
+        }
+        .send-btn:hover { background-color: var(--gold-hover); }
+        @media (max-width: 768px) { .sidebar { display: none; } }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar" id="sidebar">
+        <h3>💬 Chat History</h3>
+        <ul class="history-list" id="historyList">
+            <li class="history-item" style="color: #777; text-align: center;">No history yet</li>
+        </ul>
+    </div>
+
+    <div class="main-container">
+        <div class="chat-header">
+            <div class="brand-title">
+                <h1>WAKH AI</h1>
+                <span>World access knowledge hub</span>
+            </div>
+            <button class="history-btn" onclick="toggleSidebar()">History</button>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div class="message bot">
+                <h3 style="color: #d4af37; margin-top:0;">👋 Welcome to WAKH AI</h3>
+                <p>Hello! Ask me anything about our website articles, history, vehicles, and more.</p>
+            </div>
+        </div>
+
+        <div class="chat-input-area">
+            <div class="input-wrapper">
+                <textarea id="userInput" placeholder="Ask something or search..." rows="1" onkeypress="handleKeyPress(event)"></textarea>
+                <button class="send-btn" onclick="sendMessage()">➤</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // ඔයා ලබාදුන් Firebase Config එක
+        const firebaseConfig = {
+            apiKey: "AIzaSyCQRa5uW9XgcvV157P-RmqXsgNI4lcBB1w",
+            authDomain: "world-access-knowledge-hub.firebaseapp.com",
+            projectId: "world-access-knowledge-hub",
+            storageBucket: "world-access-knowledge-hub.firebasestorage.app",
+            messagingSenderId: "192737579009",
+            appId: "1:192737579009:web:2aa577d3ccb44162ebb000",
+            measurementId: "G-WEPDD5V9XR"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        let allPosts = [];
+        let searchHistory = [];
+
+        async function loadPosts() {
+            try {
+                const querySnapshot = await getDocs(collection(db, "posts"));
+                allPosts = [];
+                querySnapshot.forEach((doc) => {
+                    let postData = doc.data();
+                    let created_at = postData.createdAt;
+                    let dateStr = "";
+                    if (created_at && typeof created_at.toDate === 'function') {
+                        dateStr = created_at.toDate().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                    } else {
+                        dateStr = "Recent";
+                    }
+
+                    allPosts.push({
+                        title: String(postData.title || ""),
+                        content: String(postData.desc || ""),
+                        url: String(postData.link || ""),
+                        author: String(postData.author || ""),
+                        category: String(postData.category || ""),
+                        date: dateStr
+                    });
+                });
+            } catch(e) {
+                console.log("Error loading posts from Firebase:", e);
+            }
+        }
+        loadPosts();
+
+        window.toggleSidebar = function() {
+            let sidebar = document.getElementById('sidebar');
+            sidebar.style.display = sidebar.style.display === 'none' ? 'flex' : 'none';
+        }
+
+        window.handleKeyPress = function(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                window.sendMessage();
+            }
+        }
+
+        window.sendMessage = function() {
+            let inputField = document.getElementById('userInput');
+            let rawQuery = inputField.value.trim();
+            if(!rawQuery) return;
+
+            let chatMessages = document.getElementById('chatMessages');
+
+            let userMsgDiv = document.createElement('div');
+            userMsgDiv.className = 'message user';
+            userMsgDiv.textContent = rawQuery;
+            chatMessages.appendChild(userMsgDiv);
+
+            inputField.value = "";
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            addToHistory(rawQuery);
+
+            let queryLower = rawQuery.toLowerCase();
+            let isFullInfoRequest = ["full", "sampurna", "සම්පූර්ණ", "විස්තරය", "තොරතුරු", "තව", "more", "detail"].some(w => queryLower.includes(w));
+
+            let stopWords = ["kauda", "haduve", "kageda", "koheda", "mokakda", "kaudai", "isi", "visin", "ge", "how", "who", "what", "where", "did", "the", "a", "an", "is", "was"];
+            let queryWords = queryLower.split(/\s+/).filter(w => w.length > 2 && !stopWords.includes(w));
+
+            if(queryWords.length === 0) queryWords = [queryLower];
+
+            setTimeout(() => {
+                let scoredPosts = allPosts.map(p => {
+                    let score = 0;
+                    let searchableTitle = p.title.toLowerCase();
+                    let searchableContent = p.content.toLowerCase();
+
+                    queryWords.forEach(word => {
+                        if (searchableTitle.includes(word)) score += 10;
+                        if (searchableContent.includes(word)) score += 3;
+                    });
+
+                    if (searchableTitle.includes(queryLower)) score += 25;
+                    return { post: p, score: score };
+                });
+
+                scoredPosts = scoredPosts.filter(item => item.score > 0);
+                scoredPosts.sort((a, b) => b.score - a.score);
+
+                let botMsgDiv = document.createElement('div');
+                botMsgDiv.className = 'message bot';
+
+                if(scoredPosts.length === 0) {
+                    botMsgDiv.innerHTML = `<h3>🔍 ප්‍රතිඵලය</h3><p>සමාවෙන්න, ඔබගේ ප්‍රශ්නයට ගැළපෙන කිසිදු තොරතුරක් හමු නොවීය.</p>`;
+                } else {
+                    let bestMatch = scoredPosts[0].post;
+                    let msgId = 'content_' + Date.now();
+
+                    let sentences = bestMatch.content.split(/(?<=[.?!])\s+/).filter(s => s.trim().length > 0);
+                    let matchingSentences = [];
+                    
+                    sentences.forEach((sentence, index) => {
+                        let sentLower = sentence.toLowerCase();
+                        if (queryWords.some(word => sentLower.includes(word))) {
+                            if (index > 0 && !matchingSentences.includes(sentences[index - 1])) matchingSentences.push(sentences[index - 1]);
+                            if (!matchingSentences.includes(sentence)) matchingSentences.push(sentence);
+                            if (index < sentences.length - 1 && !matchingSentences.includes(sentences[index + 1])) matchingSentences.push(sentences[index + 1]);
+                        }
+                    });
+
+                    let shortSummary = matchingSentences.length > 0 ? matchingSentences.slice(0, 3).join(" ") : sentences.slice(0, 2).join(" ");
+                    let isExpanded = isFullInfoRequest ? 'block' : 'none';
+
+                    botMsgDiv.innerHTML = `
+                        <h3 style="color: #d4af37; margin-top:0;">📌 පිළිතුර:</h3>
+                        <p style="font-size: 15px; color: #fff; line-height: 1.6; margin-bottom: 10px; background: #262626; padding: 12px; border-radius: 8px; border-left: 3px solid #d4af37;">
+                            ${shortSummary}
+                        </p>
+
+                        <div id="${msgId}" style="display: ${isExpanded}; margin-top: 10px; background: #181818; padding: 12px; border-radius: 6px; border: 1px solid #333;">
+                            <h4 style="color: #4da6ff; margin: 0 0 8px 0;">📖 සම්පූර්ණ තොරතුරු (Full Content):</h4>
+                            <p style="font-size: 14px; color: #ccc; line-height: 1.6; white-space: pre-line; margin: 0;">
+                                ${bestMatch.content}
+                            </p>
+                        </div>
+
+                        <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
+                            <button onclick="toggleFullContent('${msgId}')" style="background: #2b2c2f; border: 1px solid #d4af37; color: #d4af37; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;">
+                                📜 සම්පූර්ණ තොරතුරු බලන්න / සඟවන්න
+                            </button>
+                        </div>
+
+                        <div style="font-size: 12px; color: #888; border-top: 1px solid #333; padding-top: 8px; margin-top: 10px;">
+                            📁 ලිපිය: <b>${bestMatch.title}</b> | 📅 ${bestMatch.date || 'N/A'}
+                        </div>
+                    `;
+                }
+
+                chatMessages.appendChild(botMsgDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }, 300);
+        }
+
+        window.toggleFullContent = function(id) {
+            let el = document.getElementById(id);
+            if (el.style.display === 'none') {
+                el.style.display = 'block';
+            } else {
+                el.style.display = 'none';
+            }
+        }
+
+        function addToHistory(query) {
+            if(!searchHistory.includes(query)) {
+                searchHistory.unshift(query);
+                let historyList = document.getElementById('historyList');
+                historyList.innerHTML = "";
+                searchHistory.forEach(item => {
+                    let li = document.createElement('li');
+                    li.className = 'history-item';
+                    li.textContent = item;
+                    li.onclick = () => {
+                        document.getElementById('userInput').value = item;
+                        window.sendMessage();
+                    };
+                    historyList.appendChild(li);
+                });
+            }
+        }
+    </script>
+</body>
+</html>
